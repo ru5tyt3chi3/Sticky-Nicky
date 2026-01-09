@@ -677,6 +677,7 @@
 
             // Position camera
             camera.position.set(0, 2, 0);
+            camera.rotation.order = 'YXZ';
             camera.rotation.set(0, 0, 0);
         }
 
@@ -1051,11 +1052,13 @@
                 camera.position.add(moveVector);
             }
 
-            // Mouse look
+            // Mouse look - use YXZ order to prevent roll/tilt
             if (isPointerLocked) {
+                camera.rotation.order = 'YXZ';
                 camera.rotation.y -= mouseMovement.x * gameState.mouseSensitivity;
                 camera.rotation.x -= mouseMovement.y * gameState.mouseSensitivity;
                 camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+                camera.rotation.z = 0; // Keep horizon level
             }
 
             // Reset mouse movement

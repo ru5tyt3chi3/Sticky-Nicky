@@ -499,8 +499,8 @@
         function init() {
             // Create scene
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x0a0a1a);
-            scene.fog = new THREE.Fog(0x0a0a1a, 10, 50);
+            scene.background = new THREE.Color(0x1a1a2e);
+            scene.fog = new THREE.Fog(0x1a1a2e, 20, 80);
 
             // Create camera
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -957,12 +957,12 @@
         }
 
         function createLights() {
-            // Ambient light
-            const ambient = new THREE.AmbientLight(0x111122, 0.3);
+            // Ambient light - brighter for better visibility
+            const ambient = new THREE.AmbientLight(0x4444aa, 0.6);
             scene.add(ambient);
 
             // Main directional light (simulates the flashing light)
-            const mainLight = new THREE.PointLight(0xffffaa, 1, 100);
+            const mainLight = new THREE.PointLight(0xffffaa, 1.2, 150);
             mainLight.position.set(0, 10, 0);
             mainLight.castShadow = true;
             mainLight.shadow.mapSize.width = 1024;
@@ -970,16 +970,16 @@
             mainLight.name = 'mainLight';
             scene.add(mainLight);
 
-            // Player light (small flashlight effect)
-            const playerLight = new THREE.PointLight(0x88ff88, 0.5, 15);
+            // Player light (flashlight effect) - brighter and longer range
+            const playerLight = new THREE.PointLight(0x88ff88, 1.0, 25);
             playerLight.position.set(0, 2, 0);
             playerLight.name = 'playerLight';
             scene.add(playerLight);
 
-            // Red emergency lights
+            // Red emergency lights - brighter
             for (let i = 0; i < 4; i++) {
                 const angle = (i / 4) * Math.PI * 2;
-                const redLight = new THREE.PointLight(0xff0000, 0.3, 20);
+                const redLight = new THREE.PointLight(0xff4444, 0.5, 30);
                 redLight.position.set(
                     Math.cos(angle) * 20,
                     5,
@@ -1012,7 +1012,7 @@
                     gameState.lightOn = true;
                     gameState.lightTimer = 0;
                 }
-                if (mainLight) mainLight.intensity = 0.1;
+                if (mainLight) mainLight.intensity = 0.4;
                 lightIndicator.classList.add('dark');
                 warningOverlay.classList.add('show');
                 parasite.userData.isActive = true;

@@ -298,6 +298,84 @@
         #rescue-notification.show {
             opacity: 1;
         }
+
+        /* Cutscene styles */
+        #cutscene-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 70;
+            display: none;
+        }
+
+        #cutscene-overlay.show {
+            display: block;
+        }
+
+        #cutscene-subtitle {
+            position: absolute;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 40px;
+            color: #ffffff;
+            font-size: 1.3rem;
+            text-align: center;
+            max-width: 80%;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        #cutscene-subtitle.show {
+            opacity: 1;
+        }
+
+        #skip-cutscene {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid #888;
+            color: #888;
+            padding: 8px 16px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            pointer-events: auto;
+            transition: all 0.3s;
+        }
+
+        #skip-cutscene:hover {
+            background: rgba(255, 255, 255, 0.3);
+            color: #fff;
+        }
+
+        /* Letterbox bars for cinematic effect */
+        .letterbox {
+            position: absolute;
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background: #000;
+            z-index: 65;
+            transition: height 0.5s;
+        }
+
+        .letterbox.top {
+            top: 0;
+        }
+
+        .letterbox.bottom {
+            bottom: 0;
+        }
+
+        .letterbox.hidden {
+            height: 0;
+        }
     </style>
 </head>
 <body>
@@ -403,6 +481,14 @@
         <!-- Level Indicator -->
         <div id="level-indicator"></div>
 
+        <!-- Cutscene Overlay -->
+        <div class="letterbox top hidden"></div>
+        <div class="letterbox bottom hidden"></div>
+        <div id="cutscene-overlay">
+            <div id="cutscene-subtitle"></div>
+            <button id="skip-cutscene">Press SPACE to skip</button>
+        </div>
+
         <!-- Game Over Screen -->
         <div id="game-over-screen">
             <h1 class="game-over-title">INFECTED!</h1>
@@ -432,6 +518,8 @@
         // Game State
         const gameState = {
             isPlaying: false,
+            inCutscene: false,
+            cutsceneTime: 0,
             currentLevel: 1,
             maxLevel: 3,
             friendsRescued: 0,
@@ -462,6 +550,33 @@
         let keys = {};
         let mouseMovement = { x: 0, y: 0 };
         let isPointerLocked = false;
+
+        // Cutscene variables
+        let cutsceneObjects = {};
+        let audioContext;
+        const cutsceneSequence = [
+            { time: 0, action: 'start', subtitle: '' },
+            { time: 0.5, action: 'subtitle', subtitle: 'You and Scribble explore the abandoned school...' },
+            { time: 3, action: 'walkForward', subtitle: '' },
+            { time: 4, action: 'subtitle', subtitle: 'This place gives me the creeps...' },
+            { time: 6, action: 'doorSlam', subtitle: '' },
+            { time: 6.5, action: 'turnAround', subtitle: '*SLAM*' },
+            { time: 8, action: 'subtitle', subtitle: 'What the—?!' },
+            { time: 9, action: 'hammerStart', subtitle: '' },
+            { time: 10, action: 'subtitle', subtitle: 'The door... something is blocking it!' },
+            { time: 12, action: 'locksAttach', subtitle: '*CLICK* *CLACK*' },
+            { time: 14, action: 'subtitle', subtitle: 'We\'re trapped... we have to find another way out.' },
+            { time: 16, action: 'turnForward', subtitle: '' },
+            { time: 17.5, action: 'parasiteAppear', subtitle: '' },
+            { time: 18, action: 'subtitle', subtitle: 'Scribble, look out!' },
+            { time: 19, action: 'parasiteBite', subtitle: '*HISSSSS*' },
+            { time: 20, action: 'scribbleInfected', subtitle: '' },
+            { time: 20.5, action: 'subtitle', subtitle: 'SCRIBBLE!! NO!!' },
+            { time: 22, action: 'scribbleScreech', subtitle: '*SCREEEEEECH*' },
+            { time: 23, action: 'scribbleEscape', subtitle: '' },
+            { time: 25, action: 'subtitle', subtitle: 'Scribble... I\'ll find a way to save you.' },
+            { time: 27, action: 'endCutscene', subtitle: '' }
+        ];
 
         // Level configurations
         const levelConfigs = [
@@ -566,7 +681,14 @@
                 if (e.code === 'Escape' && gameState.isPlaying) {
                     document.exitPointerLock();
                 }
+                // Skip cutscene with Space
+                if (e.code === 'Space' && gameState.inCutscene) {
+                    skipCutscene();
+                }
             });
+
+            // Skip cutscene button
+            document.getElementById('skip-cutscene').addEventListener('click', skipCutscene);
             document.addEventListener('keyup', (e) => {
                 keys[e.code] = false;
             });
@@ -600,11 +722,685 @@
 
         function startGame() {
             document.getElementById('menu-screen').classList.add('hidden');
-            document.getElementById('hud').classList.add('show');
-            gameState.isPlaying = true;
             gameState.currentLevel = 1;
             gameState.friendsRescued = 0;
 
+            // Start cutscene instead of directly loading level
+            startCutscene();
+        }
+
+        // ==================== CUTSCENE SYSTEM ====================
+
+        function startCutscene() {
+            gameState.inCutscene = true;
+            gameState.cutsceneTime = 0;
+            gameState.isPlaying = false;
+
+            // Show letterbox bars
+            document.querySelector('.letterbox.top').classList.remove('hidden');
+            document.querySelector('.letterbox.bottom').classList.remove('hidden');
+            document.getElementById('cutscene-overlay').classList.add('show');
+
+            // Initialize audio context
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            // Create cutscene scene
+            createCutsceneScene();
+        }
+
+        function createCutsceneScene() {
+            clearLevel();
+
+            // Create school hallway floor
+            const floorGeo = new THREE.PlaneGeometry(20, 50);
+            const floorMat = new THREE.MeshStandardMaterial({
+                color: 0x3a3a3a,
+                roughness: 0.9
+            });
+            const floor = new THREE.Mesh(floorGeo, floorMat);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Ceiling
+            const ceiling = new THREE.Mesh(floorGeo, new THREE.MeshStandardMaterial({ color: 0x2a2a2a }));
+            ceiling.rotation.x = Math.PI / 2;
+            ceiling.position.y = 5;
+            scene.add(ceiling);
+
+            // Left wall
+            const wallGeo = new THREE.PlaneGeometry(50, 5);
+            const wallMat = new THREE.MeshStandardMaterial({ color: 0x4a4a4a });
+            const leftWall = new THREE.Mesh(wallGeo, wallMat);
+            leftWall.position.set(-10, 2.5, 0);
+            leftWall.rotation.y = Math.PI / 2;
+            scene.add(leftWall);
+
+            // Right wall
+            const rightWall = new THREE.Mesh(wallGeo, wallMat);
+            rightWall.position.set(10, 2.5, 0);
+            rightWall.rotation.y = -Math.PI / 2;
+            scene.add(rightWall);
+
+            // Back wall (end of hallway)
+            const backWallGeo = new THREE.PlaneGeometry(20, 5);
+            const backWall = new THREE.Mesh(backWallGeo, wallMat);
+            backWall.position.set(0, 2.5, 25);
+            backWall.rotation.y = Math.PI;
+            scene.add(backWall);
+
+            // Create the entrance doors (behind player)
+            createDoors();
+
+            // Create Scribble character
+            createScribbleCutscene();
+
+            // Create floating hammer
+            createHammer();
+
+            // Create locks
+            createLocks();
+
+            // Create wood plank
+            createWoodPlank();
+
+            // Create small parasite for bite scene
+            createSmallParasite();
+
+            // Lighting for cutscene
+            const ambient = new THREE.AmbientLight(0x444466, 0.8);
+            scene.add(ambient);
+
+            const hallLight = new THREE.PointLight(0xffffcc, 1, 30);
+            hallLight.position.set(0, 4, 10);
+            scene.add(hallLight);
+
+            const hallLight2 = new THREE.PointLight(0xffffcc, 0.8, 30);
+            hallLight2.position.set(0, 4, -5);
+            scene.add(hallLight2);
+
+            // Position camera at start
+            camera.position.set(0, 2, -20);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.set(0, 0, 0);
+        }
+
+        function createDoors() {
+            // Door frame
+            const frameMat = new THREE.MeshStandardMaterial({ color: 0x2a1a0a });
+
+            // Left door
+            const doorGeo = new THREE.BoxGeometry(3, 4, 0.2);
+            const doorMat = new THREE.MeshStandardMaterial({ color: 0x4a2a1a });
+
+            const leftDoor = new THREE.Mesh(doorGeo, doorMat);
+            leftDoor.position.set(-1.6, 2, -22);
+            scene.add(leftDoor);
+            cutsceneObjects.leftDoor = leftDoor;
+
+            const rightDoor = new THREE.Mesh(doorGeo, doorMat);
+            rightDoor.position.set(1.6, 2, -22);
+            scene.add(rightDoor);
+            cutsceneObjects.rightDoor = rightDoor;
+
+            // Door handles
+            const handleGeo = new THREE.SphereGeometry(0.15);
+            const handleMat = new THREE.MeshStandardMaterial({ color: 0x888833, metalness: 0.8 });
+
+            const leftHandle = new THREE.Mesh(handleGeo, handleMat);
+            leftHandle.position.set(-0.3, 2, -21.8);
+            scene.add(leftHandle);
+
+            const rightHandle = new THREE.Mesh(handleGeo, handleMat);
+            rightHandle.position.set(0.3, 2, -21.8);
+            scene.add(rightHandle);
+        }
+
+        function createScribbleCutscene() {
+            // Scribble - based on the design: alien with long limbs, glowing eyes
+            const scribbleGroup = new THREE.Group();
+
+            // Body - elongated, scribbled look
+            const bodyGeo = new THREE.SphereGeometry(0.6, 16, 16);
+            bodyGeo.scale(1, 1.3, 0.9);
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: 0x88ff88,
+                emissive: 0x224422,
+                roughness: 0.7
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            scribbleGroup.add(body);
+
+            // Head
+            const headGeo = new THREE.SphereGeometry(0.45, 16, 16);
+            const head = new THREE.Mesh(headGeo, bodyMat);
+            head.position.y = 0.9;
+            scribbleGroup.add(head);
+
+            // Eyes - normal white for now, turn red when infected
+            const eyeGeo = new THREE.SphereGeometry(0.12, 8, 8);
+            const eyeMat = new THREE.MeshStandardMaterial({
+                color: 0xffffff,
+                emissive: 0x444444
+            });
+
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.18, 1, 0.35);
+            leftEye.name = 'leftEye';
+            scribbleGroup.add(leftEye);
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.18, 1, 0.35);
+            rightEye.name = 'rightEye';
+            scribbleGroup.add(rightEye);
+
+            // Pupils
+            const pupilGeo = new THREE.SphereGeometry(0.05, 8, 8);
+            const pupilMat = new THREE.MeshStandardMaterial({ color: 0x000000 });
+
+            const leftPupil = new THREE.Mesh(pupilGeo, pupilMat);
+            leftPupil.position.set(-0.18, 1, 0.45);
+            scribbleGroup.add(leftPupil);
+
+            const rightPupil = new THREE.Mesh(pupilGeo, pupilMat);
+            rightPupil.position.set(0.18, 1, 0.45);
+            scribbleGroup.add(rightPupil);
+
+            // Long spindly arms
+            const armMat = new THREE.MeshStandardMaterial({ color: 0x66cc66 });
+
+            // Left arm segments
+            const upperArmGeo = new THREE.CylinderGeometry(0.08, 0.06, 0.8);
+            const leftUpperArm = new THREE.Mesh(upperArmGeo, armMat);
+            leftUpperArm.position.set(-0.6, 0.3, 0);
+            leftUpperArm.rotation.z = Math.PI / 3;
+            scribbleGroup.add(leftUpperArm);
+
+            const lowerArmGeo = new THREE.CylinderGeometry(0.06, 0.04, 0.7);
+            const leftLowerArm = new THREE.Mesh(lowerArmGeo, armMat);
+            leftLowerArm.position.set(-1, 0, 0);
+            leftLowerArm.rotation.z = Math.PI / 2;
+            scribbleGroup.add(leftLowerArm);
+
+            // Right arm
+            const rightUpperArm = new THREE.Mesh(upperArmGeo, armMat);
+            rightUpperArm.position.set(0.6, 0.3, 0);
+            rightUpperArm.rotation.z = -Math.PI / 3;
+            scribbleGroup.add(rightUpperArm);
+
+            const rightLowerArm = new THREE.Mesh(lowerArmGeo, armMat);
+            rightLowerArm.position.set(1, 0, 0);
+            rightLowerArm.rotation.z = -Math.PI / 2;
+            scribbleGroup.add(rightLowerArm);
+
+            // Fingers (3 on each hand like the drawing)
+            const fingerGeo = new THREE.CylinderGeometry(0.02, 0.01, 0.25);
+            for (let i = 0; i < 3; i++) {
+                const leftFinger = new THREE.Mesh(fingerGeo, armMat);
+                leftFinger.position.set(-1.35 - i * 0.05, -0.1 + i * 0.1, 0);
+                leftFinger.rotation.z = Math.PI / 2 + (i - 1) * 0.3;
+                scribbleGroup.add(leftFinger);
+
+                const rightFinger = new THREE.Mesh(fingerGeo, armMat);
+                rightFinger.position.set(1.35 + i * 0.05, -0.1 + i * 0.1, 0);
+                rightFinger.rotation.z = -Math.PI / 2 - (i - 1) * 0.3;
+                scribbleGroup.add(rightFinger);
+            }
+
+            // Legs
+            const legGeo = new THREE.CylinderGeometry(0.08, 0.05, 1);
+            const leftLeg = new THREE.Mesh(legGeo, armMat);
+            leftLeg.position.set(-0.25, -0.9, 0);
+            leftLeg.rotation.z = 0.1;
+            scribbleGroup.add(leftLeg);
+
+            const rightLeg = new THREE.Mesh(legGeo, armMat);
+            rightLeg.position.set(0.25, -0.9, 0);
+            rightLeg.rotation.z = -0.1;
+            scribbleGroup.add(rightLeg);
+
+            scribbleGroup.position.set(1.5, 1.5, -18);
+            scribbleGroup.userData = { infected: false };
+            scene.add(scribbleGroup);
+            cutsceneObjects.scribble = scribbleGroup;
+        }
+
+        function createHammer() {
+            const hammerGroup = new THREE.Group();
+
+            // Handle
+            const handleGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.8);
+            const handleMat = new THREE.MeshStandardMaterial({ color: 0x4a3020 });
+            const handle = new THREE.Mesh(handleGeo, handleMat);
+            hammerGroup.add(handle);
+
+            // Head
+            const headGeo = new THREE.BoxGeometry(0.3, 0.2, 0.15);
+            const headMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7 });
+            const head = new THREE.Mesh(headGeo, headMat);
+            head.position.y = 0.45;
+            hammerGroup.add(head);
+
+            hammerGroup.position.set(2, 3, -22);
+            hammerGroup.rotation.z = Math.PI / 4;
+            hammerGroup.visible = false;
+            scene.add(hammerGroup);
+            cutsceneObjects.hammer = hammerGroup;
+        }
+
+        function createLocks() {
+            const locks = [];
+            const lockMat = new THREE.MeshStandardMaterial({ color: 0x888844, metalness: 0.8 });
+
+            for (let i = 0; i < 3; i++) {
+                const lockGroup = new THREE.Group();
+
+                // Lock body
+                const bodyGeo = new THREE.BoxGeometry(0.2, 0.25, 0.1);
+                const body = new THREE.Mesh(bodyGeo, lockMat);
+                lockGroup.add(body);
+
+                // Lock shackle
+                const shackleGeo = new THREE.TorusGeometry(0.08, 0.02, 8, 16, Math.PI);
+                const shackle = new THREE.Mesh(shackleGeo, lockMat);
+                shackle.position.y = 0.12;
+                shackle.rotation.x = Math.PI;
+                lockGroup.add(shackle);
+
+                lockGroup.position.set(-1 + i, 4, -22);
+                lockGroup.visible = false;
+                scene.add(lockGroup);
+                locks.push(lockGroup);
+            }
+
+            cutsceneObjects.locks = locks;
+        }
+
+        function createWoodPlank() {
+            const plankGeo = new THREE.BoxGeometry(4, 0.3, 0.1);
+            const plankMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a });
+            const plank = new THREE.Mesh(plankGeo, plankMat);
+            plank.position.set(0, 5, -22);
+            plank.visible = false;
+            scene.add(plank);
+            cutsceneObjects.plank = plank;
+        }
+
+        function createSmallParasite() {
+            const parasiteGroup = new THREE.Group();
+
+            // Small spider-like parasite
+            const bodyGeo = new THREE.SphereGeometry(0.15, 16, 16);
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: 0x220000,
+                emissive: 0x110000
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            parasiteGroup.add(body);
+
+            // Tiny red eyes
+            const eyeGeo = new THREE.SphereGeometry(0.04, 8, 8);
+            const eyeMat = new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 2
+            });
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.06, 0.05, 0.12);
+            parasiteGroup.add(leftEye);
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.06, 0.05, 0.12);
+            parasiteGroup.add(rightEye);
+
+            // 8 legs
+            const legMat = new THREE.MeshStandardMaterial({ color: 0x330000 });
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const legGeo = new THREE.CylinderGeometry(0.01, 0.01, 0.2);
+                const leg = new THREE.Mesh(legGeo, legMat);
+                leg.position.x = Math.cos(angle) * 0.15;
+                leg.position.z = Math.sin(angle) * 0.15;
+                leg.position.y = -0.05;
+                leg.rotation.z = Math.cos(angle) * 0.8;
+                leg.rotation.x = Math.sin(angle) * 0.8;
+                parasiteGroup.add(leg);
+            }
+
+            parasiteGroup.position.set(-3, 3, 5);
+            parasiteGroup.visible = false;
+            scene.add(parasiteGroup);
+            cutsceneObjects.smallParasite = parasiteGroup;
+        }
+
+        function updateCutscene(delta) {
+            if (!gameState.inCutscene) return;
+
+            gameState.cutsceneTime += delta;
+            const time = gameState.cutsceneTime;
+
+            // Process cutscene sequence
+            for (const event of cutsceneSequence) {
+                if (time >= event.time && !event.triggered) {
+                    event.triggered = true;
+                    executeCutsceneAction(event.action, event.subtitle);
+                }
+            }
+
+            // Continuous animations
+            animateCutsceneObjects(time);
+        }
+
+        function executeCutsceneAction(action, subtitle) {
+            const subtitleEl = document.getElementById('cutscene-subtitle');
+
+            switch(action) {
+                case 'subtitle':
+                    subtitleEl.textContent = subtitle;
+                    subtitleEl.classList.add('show');
+                    setTimeout(() => subtitleEl.classList.remove('show'), 2500);
+                    break;
+
+                case 'walkForward':
+                    // Camera walks forward into school
+                    cutsceneObjects.walkingForward = true;
+                    break;
+
+                case 'doorSlam':
+                    // Doors slam shut
+                    cutsceneObjects.doorsSlamming = true;
+                    playDoorSlam();
+                    break;
+
+                case 'turnAround':
+                    // Camera turns to look at doors
+                    cutsceneObjects.turningAround = true;
+                    subtitleEl.textContent = subtitle;
+                    subtitleEl.classList.add('show');
+                    setTimeout(() => subtitleEl.classList.remove('show'), 1500);
+                    break;
+
+                case 'hammerStart':
+                    // Floating hammer appears and starts hammering
+                    cutsceneObjects.hammer.visible = true;
+                    cutsceneObjects.plank.visible = true;
+                    cutsceneObjects.hammerAnimating = true;
+                    break;
+
+                case 'locksAttach':
+                    // Locks float down and attach
+                    cutsceneObjects.locks.forEach(lock => lock.visible = true);
+                    cutsceneObjects.locksAnimating = true;
+                    subtitleEl.textContent = subtitle;
+                    subtitleEl.classList.add('show');
+                    setTimeout(() => subtitleEl.classList.remove('show'), 1500);
+                    playLockSound();
+                    break;
+
+                case 'turnForward':
+                    // Camera turns back forward
+                    cutsceneObjects.turningForward = true;
+                    break;
+
+                case 'parasiteAppear':
+                    // Small parasite appears
+                    cutsceneObjects.smallParasite.visible = true;
+                    cutsceneObjects.parasiteMoving = true;
+                    break;
+
+                case 'parasiteBite':
+                    subtitleEl.textContent = subtitle;
+                    subtitleEl.classList.add('show');
+                    setTimeout(() => subtitleEl.classList.remove('show'), 1500);
+                    break;
+
+                case 'scribbleInfected':
+                    // Scribble's eyes turn red
+                    infectScribble();
+                    break;
+
+                case 'scribbleScreech':
+                    subtitleEl.textContent = subtitle;
+                    subtitleEl.classList.add('show');
+                    setTimeout(() => subtitleEl.classList.remove('show'), 1500);
+                    playScreech();
+                    break;
+
+                case 'scribbleEscape':
+                    // Scribble jumps up through roof
+                    cutsceneObjects.scribbleEscaping = true;
+                    break;
+
+                case 'endCutscene':
+                    endCutscene();
+                    break;
+            }
+        }
+
+        function animateCutsceneObjects(time) {
+            // Walk forward animation
+            if (cutsceneObjects.walkingForward && camera.position.z < -5) {
+                camera.position.z += 0.08;
+                if (cutsceneObjects.scribble) {
+                    cutsceneObjects.scribble.position.z += 0.08;
+                    // Scribble bobbing walk
+                    cutsceneObjects.scribble.position.y = 1.5 + Math.sin(time * 8) * 0.1;
+                }
+            }
+
+            // Door slam animation
+            if (cutsceneObjects.doorsSlamming) {
+                const leftDoor = cutsceneObjects.leftDoor;
+                const rightDoor = cutsceneObjects.rightDoor;
+                if (leftDoor.position.x > -1.6) {
+                    leftDoor.position.x -= 0.1;
+                    rightDoor.position.x += 0.1;
+                }
+            }
+
+            // Turn around animation
+            if (cutsceneObjects.turningAround) {
+                if (camera.rotation.y < Math.PI) {
+                    camera.rotation.y += 0.08;
+                } else {
+                    cutsceneObjects.turningAround = false;
+                }
+            }
+
+            // Hammer animation
+            if (cutsceneObjects.hammerAnimating) {
+                const hammer = cutsceneObjects.hammer;
+                const plank = cutsceneObjects.plank;
+
+                // Move plank down
+                if (plank.position.y > 2.5) {
+                    plank.position.y -= 0.05;
+                }
+
+                // Hammer swinging motion
+                hammer.rotation.z = Math.PI / 4 + Math.sin(time * 10) * 0.8;
+                hammer.position.y = 3 + Math.sin(time * 10) * 0.3;
+
+                // Move hammer to plank position
+                if (hammer.position.x > 0.5) {
+                    hammer.position.x -= 0.03;
+                }
+            }
+
+            // Locks animation
+            if (cutsceneObjects.locksAnimating) {
+                cutsceneObjects.locks.forEach((lock, i) => {
+                    if (lock.position.y > 2 + i * 0.5) {
+                        lock.position.y -= 0.08;
+                        lock.rotation.z = Math.sin(time * 5 + i) * 0.3;
+                    }
+                });
+            }
+
+            // Turn forward animation
+            if (cutsceneObjects.turningForward) {
+                if (camera.rotation.y > 0) {
+                    camera.rotation.y -= 0.06;
+                } else {
+                    camera.rotation.y = 0;
+                    cutsceneObjects.turningForward = false;
+                }
+            }
+
+            // Parasite moving toward Scribble
+            if (cutsceneObjects.parasiteMoving) {
+                const parasite = cutsceneObjects.smallParasite;
+                const scribble = cutsceneObjects.scribble;
+
+                // Move toward Scribble
+                const dx = scribble.position.x - parasite.position.x;
+                const dy = (scribble.position.y + 0.5) - parasite.position.y;
+                const dz = scribble.position.z - parasite.position.z;
+
+                parasite.position.x += dx * 0.05;
+                parasite.position.y += dy * 0.05;
+                parasite.position.z += dz * 0.05;
+
+                // Legs wiggling
+                parasite.rotation.y += 0.2;
+            }
+
+            // Scribble escaping through roof
+            if (cutsceneObjects.scribbleEscaping) {
+                const scribble = cutsceneObjects.scribble;
+                scribble.position.y += 0.3;
+                scribble.rotation.z = Math.sin(time * 20) * 0.3;
+
+                if (scribble.position.y > 15) {
+                    scribble.visible = false;
+                    cutsceneObjects.smallParasite.visible = false;
+                }
+            }
+
+            // Scribble idle animation
+            if (cutsceneObjects.scribble && !cutsceneObjects.scribbleEscaping) {
+                cutsceneObjects.scribble.rotation.y = Math.sin(time * 2) * 0.1;
+            }
+        }
+
+        function infectScribble() {
+            const scribble = cutsceneObjects.scribble;
+            scribble.userData.infected = true;
+
+            // Change eye color to glowing red
+            scribble.traverse((child) => {
+                if (child.name === 'leftEye' || child.name === 'rightEye') {
+                    child.material = new THREE.MeshStandardMaterial({
+                        color: 0xff0000,
+                        emissive: 0xff0000,
+                        emissiveIntensity: 2
+                    });
+                }
+            });
+
+            // Change body color to darker/infected
+            scribble.children[0].material = new THREE.MeshStandardMaterial({
+                color: 0x446644,
+                emissive: 0x221100,
+                roughness: 0.7
+            });
+        }
+
+        function playDoorSlam() {
+            if (!audioContext) return;
+
+            // Create a door slam sound effect
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(80, audioContext.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(30, audioContext.currentTime + 0.2);
+
+            gainNode.gain.setValueAtTime(0.5, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.3);
+        }
+
+        function playLockSound() {
+            if (!audioContext) return;
+
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.setValueAtTime(400, audioContext.currentTime + 0.05);
+
+            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.1);
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.15);
+        }
+
+        function playScreech() {
+            if (!audioContext) return;
+
+            // Create an unsettling screech sound
+            const oscillator = audioContext.createOscillator();
+            const oscillator2 = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.type = 'sawtooth';
+            oscillator.frequency.setValueAtTime(600, audioContext.currentTime);
+            oscillator.frequency.linearRampToValueAtTime(1200, audioContext.currentTime + 0.5);
+            oscillator.frequency.linearRampToValueAtTime(400, audioContext.currentTime + 1);
+
+            oscillator2.type = 'square';
+            oscillator2.frequency.setValueAtTime(650, audioContext.currentTime);
+            oscillator2.frequency.linearRampToValueAtTime(1300, audioContext.currentTime + 0.5);
+
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 0.3);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 1.5);
+
+            oscillator.connect(gainNode);
+            oscillator2.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.start(audioContext.currentTime);
+            oscillator2.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 1.5);
+            oscillator2.stop(audioContext.currentTime + 1.5);
+        }
+
+        function skipCutscene() {
+            endCutscene();
+        }
+
+        function endCutscene() {
+            gameState.inCutscene = false;
+
+            // Reset cutscene sequence triggers
+            cutsceneSequence.forEach(event => event.triggered = false);
+
+            // Hide cutscene UI
+            document.querySelector('.letterbox.top').classList.add('hidden');
+            document.querySelector('.letterbox.bottom').classList.add('hidden');
+            document.getElementById('cutscene-overlay').classList.remove('show');
+            document.getElementById('cutscene-subtitle').classList.remove('show');
+
+            // Show HUD
+            document.getElementById('hud').classList.add('show');
+
+            // Start actual gameplay
+            gameState.isPlaying = true;
             loadLevel(gameState.currentLevel);
 
             // Request pointer lock
@@ -612,6 +1408,8 @@
                 renderer.domElement.requestPointerLock();
             }, 100);
         }
+
+        // ==================== END CUTSCENE SYSTEM ====================
 
         function loadLevel(levelNum) {
             // Clear existing objects
@@ -1226,7 +2024,9 @@
 
             const delta = clock.getDelta();
 
-            if (gameState.isPlaying) {
+            if (gameState.inCutscene) {
+                updateCutscene(delta);
+            } else if (gameState.isPlaying) {
                 updateLighting(delta);
                 updatePlayer(delta);
                 updateParasite(delta);

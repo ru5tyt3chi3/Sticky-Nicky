@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alien Escape - Sticky Nicky</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            overflow: hidden;
+            background: #000;
+            font-family: 'Courier New', monospace;
+        }
+
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* Menu Styles */
+        #menu-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #0a0a1a 0%, #1a0a2a 50%, #0a1a1a 100%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        #menu-screen.hidden {
+            display: none;
+        }
+
+        .menu-title {
+            font-size: 4rem;
+            color: #00ff88;
+            text-shadow: 0 0 20px #00ff88, 0 0 40px #00ff88;
+            margin-bottom: 1rem;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        .menu-subtitle {
+            font-size: 1.2rem;
+            color: #ff4444;
+            margin-bottom: 3rem;
+            text-shadow: 0 0 10px #ff4444;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .menu-btn {
+            width: 200px;
+            padding: 15px 30px;
+            margin: 10px;
+            font-size: 1.5rem;
+            font-family: 'Courier New', monospace;
+            background: transparent;
+            border: 2px solid #00ff88;
+            color: #00ff88;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+        }
+
+        .menu-btn:hover {
+            background: #00ff88;
+            color: #000;
+            box-shadow: 0 0 30px #00ff88;
+        }
+
+        /* Parasite animation in menu */
+        #menu-parasite {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            opacity: 0.3;
+            animation: float 4s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+
+        /* Settings Modal */
+        #settings-modal, #credits-modal {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 10, 30, 0.95);
+            border: 2px solid #00ff88;
+            padding: 30px;
+            z-index: 150;
+            min-width: 300px;
+            display: none;
+        }
+
+        #settings-modal.show, #credits-modal.show {
+            display: block;
+        }
+
+        .modal-title {
+            color: #00ff88;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 15px 0;
+            color: #fff;
+        }
+
+        .setting-row input[type="range"] {
+            width: 120px;
+        }
+
+        .close-btn {
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        /* HUD */
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #00ff88;
+            font-size: 1.2rem;
+            z-index: 50;
+            display: none;
+        }
+
+        #hud.show {
+            display: block;
+        }
+
+        .hud-item {
+            margin: 10px 0;
+            text-shadow: 0 0 10px #00ff88;
+        }
+
+        #light-indicator {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            background: #ffff00;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 10px;
+            transition: all 0.1s;
+            box-shadow: 0 0 20px #ffff00;
+        }
+
+        #light-indicator.dark {
+            background: #330000;
+            box-shadow: 0 0 20px #ff0000;
+        }
+
+        /* Warning overlay */
+        #warning-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 0, 0, 0.3);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 40;
+            transition: opacity 0.3s;
+        }
+
+        #warning-overlay.show {
+            opacity: 1;
+            animation: warningPulse 0.5s ease-in-out infinite;
+        }
+
+        @keyframes warningPulse {
+            0%, 100% { opacity: 0.3; }
+            50% { opacity: 0.5; }
+        }
+
+        /* Game Over / Win Screen */
+        #game-over-screen, #win-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+        }
+
+        #game-over-screen.show, #win-screen.show {
+            display: flex;
+        }
+
+        .game-over-title {
+            font-size: 4rem;
+            color: #ff0000;
+            text-shadow: 0 0 30px #ff0000;
+            margin-bottom: 2rem;
+        }
+
+        .win-title {
+            font-size: 4rem;
+            color: #00ff88;
+            text-shadow: 0 0 30px #00ff88;
+            margin-bottom: 2rem;
+        }
+
+        /* Level indicator */
+        #level-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 3rem;
+            color: #00ff88;
+            text-shadow: 0 0 30px #00ff88;
+            z-index: 60;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #level-indicator.show {
+            opacity: 1;
+        }
+
+        /* Instructions */
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #888;
+            font-size: 0.9rem;
+            text-align: center;
+            z-index: 50;
+        }
+
+        /* Credits content */
+        .credits-content {
+            color: #aaa;
+            text-align: center;
+            line-height: 1.8;
+        }
+
+        .credits-content h3 {
+            color: #00ff88;
+            margin: 15px 0 5px;
+        }
+
+        /* Friend rescue notification */
+        #rescue-notification {
+            position: absolute;
+            top: 100px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 255, 136, 0.2);
+            border: 2px solid #00ff88;
+            padding: 15px 30px;
+            color: #00ff88;
+            font-size: 1.2rem;
+            z-index: 55;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        #rescue-notification.show {
+            opacity: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <!-- Menu Screen -->
+        <div id="menu-screen">
+            <svg id="menu-parasite" viewBox="0 0 200 200">
+                <!-- Animated parasite SVG -->
+                <circle cx="100" cy="100" r="40" fill="none" stroke="#ff4444" stroke-width="3">
+                    <animate attributeName="r" values="35;45;35" dur="2s" repeatCount="indefinite"/>
+                </circle>
+                <circle cx="100" cy="100" r="25" fill="#220000"/>
+                <!-- Tentacles -->
+                <g stroke="#ff4444" stroke-width="3" fill="none">
+                    <path d="M100 60 Q110 30 90 10">
+                        <animate attributeName="d" values="M100 60 Q110 30 90 10;M100 60 Q90 30 110 10;M100 60 Q110 30 90 10" dur="1.5s" repeatCount="indefinite"/>
+                    </path>
+                    <path d="M140 100 Q170 110 190 90">
+                        <animate attributeName="d" values="M140 100 Q170 110 190 90;M140 100 Q170 90 190 110;M140 100 Q170 110 190 90" dur="1.7s" repeatCount="indefinite"/>
+                    </path>
+                    <path d="M100 140 Q90 170 110 190">
+                        <animate attributeName="d" values="M100 140 Q90 170 110 190;M100 140 Q110 170 90 190;M100 140 Q90 170 110 190" dur="1.3s" repeatCount="indefinite"/>
+                    </path>
+                    <path d="M60 100 Q30 90 10 110">
+                        <animate attributeName="d" values="M60 100 Q30 90 10 110;M60 100 Q30 110 10 90;M60 100 Q30 90 10 110" dur="1.9s" repeatCount="indefinite"/>
+                    </path>
+                    <path d="M70 70 Q40 50 20 30">
+                        <animate attributeName="d" values="M70 70 Q40 50 20 30;M70 70 Q50 40 30 20;M70 70 Q40 50 20 30" dur="1.6s" repeatCount="indefinite"/>
+                    </path>
+                    <path d="M130 70 Q160 50 180 30">
+                        <animate attributeName="d" values="M130 70 Q160 50 180 30;M130 70 Q150 40 170 20;M130 70 Q160 50 180 30" dur="1.4s" repeatCount="indefinite"/>
+                    </path>
+                    <path d="M130 130 Q160 150 180 170">
+                        <animate attributeName="d" values="M130 130 Q160 150 180 170;M130 130 Q150 160 170 180;M130 130 Q160 150 180 170" dur="1.8s" repeatCount="indefinite"/>
+                    </path>
+                    <path d="M70 130 Q40 150 20 170">
+                        <animate attributeName="d" values="M70 130 Q40 150 20 170;M70 130 Q50 160 30 180;M70 130 Q40 150 20 170" dur="1.5s" repeatCount="indefinite"/>
+                    </path>
+                </g>
+                <!-- Eyes -->
+                <circle cx="90" cy="95" r="8" fill="#ff0000">
+                    <animate attributeName="fill" values="#ff0000;#ff6666;#ff0000" dur="3s" repeatCount="indefinite"/>
+                </circle>
+                <circle cx="110" cy="95" r="8" fill="#ff0000">
+                    <animate attributeName="fill" values="#ff0000;#ff6666;#ff0000" dur="3s" repeatCount="indefinite"/>
+                </circle>
+            </svg>
+            <h1 class="menu-title">ALIEN ESCAPE</h1>
+            <p class="menu-subtitle">Escape the Parasite... Save Your Friends</p>
+            <button class="menu-btn" id="play-btn">PLAY</button>
+            <button class="menu-btn" id="settings-btn">SETTINGS</button>
+            <button class="menu-btn" id="credits-btn">CREDITS</button>
+        </div>
+
+        <!-- Settings Modal -->
+        <div id="settings-modal">
+            <h2 class="modal-title">SETTINGS</h2>
+            <div class="setting-row">
+                <span>Music Volume</span>
+                <input type="range" id="music-volume" min="0" max="100" value="50">
+            </div>
+            <div class="setting-row">
+                <span>SFX Volume</span>
+                <input type="range" id="sfx-volume" min="0" max="100" value="70">
+            </div>
+            <div class="setting-row">
+                <span>Mouse Sensitivity</span>
+                <input type="range" id="sensitivity" min="1" max="10" value="5">
+            </div>
+            <button class="menu-btn close-btn" id="close-settings">CLOSE</button>
+        </div>
+
+        <!-- Credits Modal -->
+        <div id="credits-modal">
+            <h2 class="modal-title">CREDITS</h2>
+            <div class="credits-content">
+                <h3>Game Design</h3>
+                <p>Original Concept & Art by You!</p>
+                <h3>Characters</h3>
+                <p>Scribble - The Infected Friend</p>
+                <p>Doobie - Dies but comes back</p>
+                <p>Shtarakam - Your Alien Buddy</p>
+                <h3>Story</h3>
+                <p>"The Light Tells a Story"</p>
+                <p>When darkness falls, the parasite appears...</p>
+            </div>
+            <button class="menu-btn close-btn" id="close-credits">CLOSE</button>
+        </div>
+
+        <!-- HUD -->
+        <div id="hud">
+            <div class="hud-item">Level: <span id="current-level">1</span> / 3</div>
+            <div class="hud-item">Friends Rescued: <span id="friends-rescued">0</span> / 3</div>
+            <div class="hud-item">Light: <span id="light-indicator"></span></div>
+        </div>
+
+        <!-- Warning Overlay -->
+        <div id="warning-overlay"></div>
+
+        <!-- Rescue Notification -->
+        <div id="rescue-notification"></div>
+
+        <!-- Level Indicator -->
+        <div id="level-indicator"></div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen">
+            <h1 class="game-over-title">INFECTED!</h1>
+            <p style="color: #ff6666; margin-bottom: 2rem;">The parasite got you...</p>
+            <button class="menu-btn" id="retry-btn">TRY AGAIN</button>
+            <button class="menu-btn" id="menu-btn-go">MAIN MENU</button>
+        </div>
+
+        <!-- Win Screen -->
+        <div id="win-screen">
+            <h1 class="win-title">ESCAPED!</h1>
+            <p style="color: #88ff88; margin-bottom: 2rem;">You and your friends are safe... for now.</p>
+            <button class="menu-btn" id="play-again-btn">PLAY AGAIN</button>
+            <button class="menu-btn" id="menu-btn-win">MAIN MENU</button>
+        </div>
+
+        <!-- Instructions -->
+        <div id="instructions">
+            WASD to move | SHIFT to run | Find the exit portal while avoiding the parasite in darkness
+        </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <script>
+        // Game State
+        const gameState = {
+            isPlaying: false,
+            currentLevel: 1,
+            maxLevel: 3,
+            friendsRescued: 0,
+            totalFriends: 3,
+            lightOn: true,
+            lightTimer: 0,
+            lightInterval: 3000, // Light blinks every 3 seconds
+            lightDuration: 2000, // Light stays on for 2 seconds
+            playerHealth: 100,
+            mouseSensitivity: 0.002,
+            isPaused: false
+        };
+
+        // Settings
+        const settings = {
+            musicVolume: 0.5,
+            sfxVolume: 0.7,
+            sensitivity: 5
+        };
+
+        // Three.js variables
+        let scene, camera, renderer;
+        let player, parasite;
+        let friends = [];
+        let exitPortal;
+        let walls = [];
+        let clock;
+        let keys = {};
+        let mouseMovement = { x: 0, y: 0 };
+        let isPointerLocked = false;
+
+        // Level configurations
+        const levelConfigs = [
+            { // Level 1 - Simple maze
+                size: 30,
+                wallCount: 15,
+                parasiteSpeed: 0.03,
+                lightInterval: 4000,
+                lightDuration: 2500,
+                friendName: "Doobie",
+                friendColor: 0x44ff44
+            },
+            { // Level 2 - Medium difficulty
+                size: 40,
+                wallCount: 25,
+                parasiteSpeed: 0.04,
+                lightInterval: 3000,
+                lightDuration: 2000,
+                friendName: "Shtarakam",
+                friendColor: 0x4444ff
+            },
+            { // Level 3 - Hard - Scribble is here (infected!)
+                size: 50,
+                wallCount: 35,
+                parasiteSpeed: 0.05,
+                lightInterval: 2500,
+                lightDuration: 1500,
+                friendName: "Scribble",
+                friendColor: 0xff4444,
+                isInfected: true
+            }
+        ];
+
+        // Initialize the game
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a1a);
+            scene.fog = new THREE.Fog(0x0a0a1a, 10, 50);
+
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.y = 2;
+
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            document.getElementById('game-container').appendChild(renderer.domElement);
+
+            // Clock for timing
+            clock = new THREE.Clock();
+
+            // Event listeners
+            setupEventListeners();
+
+            // Start animation loop
+            animate();
+        }
+
+        function setupEventListeners() {
+            // Menu buttons
+            document.getElementById('play-btn').addEventListener('click', startGame);
+            document.getElementById('settings-btn').addEventListener('click', () => {
+                document.getElementById('settings-modal').classList.add('show');
+            });
+            document.getElementById('credits-btn').addEventListener('click', () => {
+                document.getElementById('credits-modal').classList.add('show');
+            });
+            document.getElementById('close-settings').addEventListener('click', () => {
+                document.getElementById('settings-modal').classList.remove('show');
+            });
+            document.getElementById('close-credits').addEventListener('click', () => {
+                document.getElementById('credits-modal').classList.remove('show');
+            });
+            document.getElementById('retry-btn').addEventListener('click', () => {
+                document.getElementById('game-over-screen').classList.remove('show');
+                resetLevel();
+            });
+            document.getElementById('menu-btn-go').addEventListener('click', returnToMenu);
+            document.getElementById('play-again-btn').addEventListener('click', () => {
+                document.getElementById('win-screen').classList.remove('show');
+                gameState.currentLevel = 1;
+                gameState.friendsRescued = 0;
+                startGame();
+            });
+            document.getElementById('menu-btn-win').addEventListener('click', () => {
+                document.getElementById('win-screen').classList.remove('show');
+                returnToMenu();
+            });
+
+            // Settings
+            document.getElementById('sensitivity').addEventListener('input', (e) => {
+                settings.sensitivity = parseInt(e.target.value);
+                gameState.mouseSensitivity = 0.001 * settings.sensitivity;
+            });
+
+            // Keyboard controls
+            document.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+                if (e.code === 'Escape' && gameState.isPlaying) {
+                    document.exitPointerLock();
+                }
+            });
+            document.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+
+            // Mouse controls
+            document.addEventListener('mousemove', (e) => {
+                if (isPointerLocked) {
+                    mouseMovement.x = e.movementX;
+                    mouseMovement.y = e.movementY;
+                }
+            });
+
+            // Pointer lock
+            renderer.domElement.addEventListener('click', () => {
+                if (gameState.isPlaying) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+
+            document.addEventListener('pointerlockchange', () => {
+                isPointerLocked = document.pointerLockElement === renderer.domElement;
+            });
+
+            // Window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+
+        function startGame() {
+            document.getElementById('menu-screen').classList.add('hidden');
+            document.getElementById('hud').classList.add('show');
+            gameState.isPlaying = true;
+            gameState.currentLevel = 1;
+            gameState.friendsRescued = 0;
+
+            loadLevel(gameState.currentLevel);
+
+            // Request pointer lock
+            setTimeout(() => {
+                renderer.domElement.requestPointerLock();
+            }, 100);
+        }
+
+        function loadLevel(levelNum) {
+            // Clear existing objects
+            clearLevel();
+
+            const config = levelConfigs[levelNum - 1];
+            gameState.lightInterval = config.lightInterval;
+            gameState.lightDuration = config.lightDuration;
+            gameState.lightOn = true;
+            gameState.lightTimer = 0;
+
+            // Update HUD
+            document.getElementById('current-level').textContent = levelNum;
+            document.getElementById('friends-rescued').textContent = gameState.friendsRescued;
+
+            // Show level indicator
+            const levelIndicator = document.getElementById('level-indicator');
+            levelIndicator.textContent = `Level ${levelNum}`;
+            levelIndicator.classList.add('show');
+            setTimeout(() => levelIndicator.classList.remove('show'), 2000);
+
+            // Create floor
+            const floorGeometry = new THREE.PlaneGeometry(config.size * 2, config.size * 2);
+            const floorMaterial = new THREE.MeshStandardMaterial({
+                color: 0x1a1a2a,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = -Math.PI / 2;
+            floor.receiveShadow = true;
+            scene.add(floor);
+
+            // Create ceiling
+            const ceiling = new THREE.Mesh(floorGeometry, new THREE.MeshStandardMaterial({
+                color: 0x0a0a1a,
+                roughness: 1
+            }));
+            ceiling.rotation.x = Math.PI / 2;
+            ceiling.position.y = 6;
+            scene.add(ceiling);
+
+            // Create boundary walls
+            createBoundaryWalls(config.size);
+
+            // Create maze walls
+            createMazeWalls(config.size, config.wallCount);
+
+            // Create player
+            createPlayer();
+
+            // Create parasite
+            createParasite(config.size, config.parasiteSpeed);
+
+            // Create friend to rescue
+            createFriend(config.size, config.friendName, config.friendColor, config.isInfected);
+
+            // Create exit portal
+            createExitPortal(config.size);
+
+            // Create lights
+            createLights();
+
+            // Position camera
+            camera.position.set(0, 2, 0);
+            camera.rotation.set(0, 0, 0);
+        }
+
+        function clearLevel() {
+            // Remove all objects except camera
+            while(scene.children.length > 0) {
+                scene.remove(scene.children[0]);
+            }
+            walls = [];
+            friends = [];
+        }
+
+        function createBoundaryWalls(size) {
+            const wallMaterial = new THREE.MeshStandardMaterial({
+                color: 0x2a2a4a,
+                roughness: 0.7
+            });
+            const wallHeight = 6;
+
+            // Create 4 boundary walls
+            const wallConfigs = [
+                { pos: [0, wallHeight/2, -size], rot: 0, width: size * 2 },
+                { pos: [0, wallHeight/2, size], rot: 0, width: size * 2 },
+                { pos: [-size, wallHeight/2, 0], rot: Math.PI/2, width: size * 2 },
+                { pos: [size, wallHeight/2, 0], rot: Math.PI/2, width: size * 2 }
+            ];
+
+            wallConfigs.forEach(config => {
+                const geometry = new THREE.BoxGeometry(config.width, wallHeight, 1);
+                const wall = new THREE.Mesh(geometry, wallMaterial);
+                wall.position.set(...config.pos);
+                wall.rotation.y = config.rot;
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                scene.add(wall);
+                walls.push(wall);
+            });
+        }
+
+        function createMazeWalls(size, count) {
+            const wallMaterial = new THREE.MeshStandardMaterial({
+                color: 0x3a2a5a,
+                roughness: 0.6
+            });
+
+            for (let i = 0; i < count; i++) {
+                const width = Math.random() * 8 + 4;
+                const height = 5;
+                const depth = 1;
+
+                const geometry = new THREE.BoxGeometry(width, height, depth);
+                const wall = new THREE.Mesh(geometry, wallMaterial);
+
+                // Random position
+                wall.position.x = (Math.random() - 0.5) * (size * 1.5);
+                wall.position.y = height / 2;
+                wall.position.z = (Math.random() - 0.5) * (size * 1.5);
+                wall.rotation.y = Math.random() * Math.PI;
+
+                // Make sure wall isn't too close to spawn
+                const distFromSpawn = Math.sqrt(wall.position.x ** 2 + wall.position.z ** 2);
+                if (distFromSpawn < 5) {
+                    wall.position.x += 10;
+                    wall.position.z += 10;
+                }
+
+                wall.castShadow = true;
+                wall.receiveShadow = true;
+                scene.add(wall);
+                walls.push(wall);
+            }
+        }
+
+        function createPlayer() {
+            // Player is represented by camera position
+            // Create a simple alien body for third-person reference (invisible in first person)
+            const playerGeometry = new THREE.Group();
+
+            // Body
+            const bodyGeo = new THREE.SphereGeometry(0.5, 16, 16);
+            const bodyMat = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x004422 });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            playerGeometry.add(body);
+
+            player = playerGeometry;
+            player.position.set(0, 1, 0);
+            scene.add(player);
+        }
+
+        function createParasite(size, speed) {
+            // Create the scary parasite based on the drawing
+            const parasiteGroup = new THREE.Group();
+
+            // Main body - dark, pulsating sphere
+            const bodyGeo = new THREE.SphereGeometry(1.5, 32, 32);
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: 0x220000,
+                emissive: 0x110000,
+                roughness: 0.3
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            parasiteGroup.add(body);
+
+            // Glowing red eyes
+            const eyeGeo = new THREE.SphereGeometry(0.3, 16, 16);
+            const eyeMat = new THREE.MeshStandardMaterial({
+                color: 0xff0000,
+                emissive: 0xff0000,
+                emissiveIntensity: 2
+            });
+
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.5, 0.3, 1.2);
+            parasiteGroup.add(leftEye);
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.5, 0.3, 1.2);
+            parasiteGroup.add(rightEye);
+
+            // Tentacles
+            const tentacleMat = new THREE.MeshStandardMaterial({
+                color: 0x440000,
+                emissive: 0x220000
+            });
+
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const tentacle = createTentacle(tentacleMat);
+                tentacle.position.x = Math.cos(angle) * 1.2;
+                tentacle.position.z = Math.sin(angle) * 1.2;
+                tentacle.position.y = -0.5;
+                tentacle.rotation.z = Math.cos(angle) * 0.5;
+                tentacle.rotation.x = Math.sin(angle) * 0.5;
+                parasiteGroup.add(tentacle);
+            }
+
+            // Position parasite far from player
+            parasiteGroup.position.set(
+                (Math.random() - 0.5) * size,
+                2,
+                -size * 0.7
+            );
+
+            parasiteGroup.userData = {
+                speed: speed,
+                originalY: 2,
+                isActive: false
+            };
+
+            parasite = parasiteGroup;
+            scene.add(parasite);
+        }
+
+        function createTentacle(material) {
+            const group = new THREE.Group();
+            const segments = 5;
+
+            for (let i = 0; i < segments; i++) {
+                const size = 0.3 - (i * 0.05);
+                const geo = new THREE.SphereGeometry(size, 8, 8);
+                const segment = new THREE.Mesh(geo, material);
+                segment.position.y = -i * 0.4;
+                group.add(segment);
+            }
+
+            return group;
+        }
+
+        function createFriend(size, name, color, isInfected = false) {
+            const friendGroup = new THREE.Group();
+
+            // Body
+            const bodyGeo = new THREE.SphereGeometry(0.6, 16, 16);
+            const bodyMat = new THREE.MeshStandardMaterial({
+                color: color,
+                emissive: isInfected ? 0x440000 : color,
+                emissiveIntensity: isInfected ? 0.5 : 0.2
+            });
+            const body = new THREE.Mesh(bodyGeo, bodyMat);
+            friendGroup.add(body);
+
+            // Eyes - red if infected
+            const eyeColor = isInfected ? 0xff0000 : 0xffffff;
+            const eyeGeo = new THREE.SphereGeometry(0.15, 8, 8);
+            const eyeMat = new THREE.MeshStandardMaterial({
+                color: eyeColor,
+                emissive: isInfected ? 0xff0000 : 0x000000,
+                emissiveIntensity: isInfected ? 1 : 0
+            });
+
+            const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+            leftEye.position.set(-0.2, 0.2, 0.5);
+            friendGroup.add(leftEye);
+
+            const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+            rightEye.position.set(0.2, 0.2, 0.5);
+            friendGroup.add(rightEye);
+
+            // Arms
+            const armGeo = new THREE.CylinderGeometry(0.1, 0.1, 0.8);
+            const armMat = new THREE.MeshStandardMaterial({ color: color });
+
+            const leftArm = new THREE.Mesh(armGeo, armMat);
+            leftArm.position.set(-0.7, 0, 0);
+            leftArm.rotation.z = Math.PI / 4;
+            friendGroup.add(leftArm);
+
+            const rightArm = new THREE.Mesh(armGeo, armMat);
+            rightArm.position.set(0.7, 0, 0);
+            rightArm.rotation.z = -Math.PI / 4;
+            friendGroup.add(rightArm);
+
+            // Position friend
+            friendGroup.position.set(
+                (Math.random() - 0.5) * size * 0.8,
+                1,
+                (Math.random() - 0.5) * size * 0.8
+            );
+
+            // Make sure friend isn't too close to spawn or exit
+            if (friendGroup.position.length() < 10) {
+                friendGroup.position.x += 15;
+            }
+
+            friendGroup.userData = {
+                name: name,
+                isInfected: isInfected,
+                rescued: false
+            };
+
+            friends.push(friendGroup);
+            scene.add(friendGroup);
+
+            // Add floating name tag
+            // (In a full implementation, we'd use CSS2DRenderer for proper labels)
+        }
+
+        function createExitPortal(size) {
+            const portalGroup = new THREE.Group();
+
+            // Outer ring
+            const ringGeo = new THREE.TorusGeometry(2, 0.3, 16, 32);
+            const ringMat = new THREE.MeshStandardMaterial({
+                color: 0x00ffff,
+                emissive: 0x00ffff,
+                emissiveIntensity: 0.5
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            portalGroup.add(ring);
+
+            // Inner portal effect
+            const portalGeo = new THREE.CircleGeometry(1.8, 32);
+            const portalMat = new THREE.MeshStandardMaterial({
+                color: 0x004444,
+                emissive: 0x008888,
+                emissiveIntensity: 1,
+                transparent: true,
+                opacity: 0.8
+            });
+            const portal = new THREE.Mesh(portalGeo, portalMat);
+            portal.rotation.x = -Math.PI / 2;
+            portal.position.y = 0.1;
+            portalGroup.add(portal);
+
+            // Position at far end of level
+            portalGroup.position.set(
+                (Math.random() - 0.5) * size * 0.5,
+                0.5,
+                size * 0.8
+            );
+
+            portalGroup.userData = { isPortal: true };
+
+            exitPortal = portalGroup;
+            scene.add(exitPortal);
+        }
+
+        function createLights() {
+            // Ambient light
+            const ambient = new THREE.AmbientLight(0x111122, 0.3);
+            scene.add(ambient);
+
+            // Main directional light (simulates the flashing light)
+            const mainLight = new THREE.PointLight(0xffffaa, 1, 100);
+            mainLight.position.set(0, 10, 0);
+            mainLight.castShadow = true;
+            mainLight.shadow.mapSize.width = 1024;
+            mainLight.shadow.mapSize.height = 1024;
+            mainLight.name = 'mainLight';
+            scene.add(mainLight);
+
+            // Player light (small flashlight effect)
+            const playerLight = new THREE.PointLight(0x88ff88, 0.5, 15);
+            playerLight.position.set(0, 2, 0);
+            playerLight.name = 'playerLight';
+            scene.add(playerLight);
+
+            // Red emergency lights
+            for (let i = 0; i < 4; i++) {
+                const angle = (i / 4) * Math.PI * 2;
+                const redLight = new THREE.PointLight(0xff0000, 0.3, 20);
+                redLight.position.set(
+                    Math.cos(angle) * 20,
+                    5,
+                    Math.sin(angle) * 20
+                );
+                scene.add(redLight);
+            }
+        }
+
+        function updateLighting(delta) {
+            gameState.lightTimer += delta * 1000;
+
+            const mainLight = scene.getObjectByName('mainLight');
+            const lightIndicator = document.getElementById('light-indicator');
+            const warningOverlay = document.getElementById('warning-overlay');
+
+            if (gameState.lightOn) {
+                // Light is on
+                if (gameState.lightTimer >= gameState.lightDuration) {
+                    gameState.lightOn = false;
+                    gameState.lightTimer = 0;
+                }
+                if (mainLight) mainLight.intensity = 1;
+                lightIndicator.classList.remove('dark');
+                warningOverlay.classList.remove('show');
+                parasite.userData.isActive = false;
+            } else {
+                // Light is off - DANGER!
+                if (gameState.lightTimer >= gameState.lightInterval - gameState.lightDuration) {
+                    gameState.lightOn = true;
+                    gameState.lightTimer = 0;
+                }
+                if (mainLight) mainLight.intensity = 0.1;
+                lightIndicator.classList.add('dark');
+                warningOverlay.classList.add('show');
+                parasite.userData.isActive = true;
+            }
+        }
+
+        function updatePlayer(delta) {
+            const speed = keys['ShiftLeft'] || keys['ShiftRight'] ? 0.15 : 0.08;
+            const moveVector = new THREE.Vector3();
+
+            // Get camera direction
+            const cameraDirection = new THREE.Vector3();
+            camera.getWorldDirection(cameraDirection);
+            cameraDirection.y = 0;
+            cameraDirection.normalize();
+
+            const rightVector = new THREE.Vector3();
+            rightVector.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
+
+            // Movement
+            if (keys['KeyW']) {
+                moveVector.add(cameraDirection.clone().multiplyScalar(speed));
+            }
+            if (keys['KeyS']) {
+                moveVector.add(cameraDirection.clone().multiplyScalar(-speed));
+            }
+            if (keys['KeyA']) {
+                moveVector.add(rightVector.clone().multiplyScalar(-speed));
+            }
+            if (keys['KeyD']) {
+                moveVector.add(rightVector.clone().multiplyScalar(speed));
+            }
+
+            // Check collision before moving
+            const newPos = camera.position.clone().add(moveVector);
+            if (!checkCollision(newPos)) {
+                camera.position.add(moveVector);
+            }
+
+            // Mouse look
+            if (isPointerLocked) {
+                camera.rotation.y -= mouseMovement.x * gameState.mouseSensitivity;
+                camera.rotation.x -= mouseMovement.y * gameState.mouseSensitivity;
+                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
+            }
+
+            // Reset mouse movement
+            mouseMovement.x = 0;
+            mouseMovement.y = 0;
+
+            // Update player light position
+            const playerLight = scene.getObjectByName('playerLight');
+            if (playerLight) {
+                playerLight.position.copy(camera.position);
+            }
+        }
+
+        function checkCollision(position) {
+            const playerRadius = 0.5;
+
+            // Check boundary
+            const config = levelConfigs[gameState.currentLevel - 1];
+            if (Math.abs(position.x) > config.size - 1 || Math.abs(position.z) > config.size - 1) {
+                return true;
+            }
+
+            // Check walls (simplified box collision)
+            for (const wall of walls) {
+                const wallBox = new THREE.Box3().setFromObject(wall);
+                const playerSphere = new THREE.Sphere(position, playerRadius);
+                if (wallBox.intersectsSphere(playerSphere)) {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        function updateParasite(delta) {
+            if (!parasite) return;
+
+            // Parasite bobs up and down
+            parasite.position.y = parasite.userData.originalY + Math.sin(Date.now() * 0.003) * 0.3;
+
+            // Rotate tentacles
+            parasite.rotation.y += delta * 0.5;
+
+            // Only chase player when lights are off
+            if (parasite.userData.isActive) {
+                const direction = new THREE.Vector3();
+                direction.subVectors(camera.position, parasite.position);
+                direction.y = 0;
+                direction.normalize();
+
+                parasite.position.add(direction.multiplyScalar(parasite.userData.speed));
+
+                // Check if parasite caught player
+                const distance = camera.position.distanceTo(parasite.position);
+                if (distance < 2) {
+                    gameOver();
+                }
+            } else {
+                // Slowly wander when light is on
+                parasite.position.x += Math.sin(Date.now() * 0.001) * 0.01;
+                parasite.position.z += Math.cos(Date.now() * 0.001) * 0.01;
+            }
+        }
+
+        function updateFriends(delta) {
+            for (const friend of friends) {
+                if (friend.userData.rescued) continue;
+
+                // Bob animation
+                friend.position.y = 1 + Math.sin(Date.now() * 0.005 + friends.indexOf(friend)) * 0.2;
+                friend.rotation.y += delta;
+
+                // Check if player is close enough to rescue
+                const distance = camera.position.distanceTo(friend.position);
+                if (distance < 2) {
+                    rescueFriend(friend);
+                }
+            }
+        }
+
+        function rescueFriend(friend) {
+            friend.userData.rescued = true;
+            scene.remove(friend);
+            gameState.friendsRescued++;
+            document.getElementById('friends-rescued').textContent = gameState.friendsRescued;
+
+            // Show notification
+            const notification = document.getElementById('rescue-notification');
+            if (friend.userData.isInfected) {
+                notification.innerHTML = `<strong>${friend.userData.name}</strong> was infected but you saved them!`;
+                notification.style.borderColor = '#ff4444';
+                notification.style.color = '#ff8888';
+            } else {
+                notification.innerHTML = `<strong>${friend.userData.name}</strong> rescued!`;
+                notification.style.borderColor = '#00ff88';
+                notification.style.color = '#00ff88';
+            }
+            notification.classList.add('show');
+            setTimeout(() => notification.classList.remove('show'), 2000);
+        }
+
+        function updateExitPortal(delta) {
+            if (!exitPortal) return;
+
+            // Rotate portal
+            exitPortal.rotation.y += delta;
+
+            // Pulse effect
+            const scale = 1 + Math.sin(Date.now() * 0.003) * 0.1;
+            exitPortal.scale.set(scale, scale, scale);
+
+            // Check if player reached portal and has rescued friend
+            const distance = camera.position.distanceTo(exitPortal.position);
+            if (distance < 3) {
+                const friendRescuedThisLevel = friends.some(f => f.userData.rescued);
+                if (friendRescuedThisLevel) {
+                    nextLevel();
+                }
+            }
+        }
+
+        function nextLevel() {
+            if (gameState.currentLevel >= gameState.maxLevel) {
+                winGame();
+            } else {
+                gameState.currentLevel++;
+                loadLevel(gameState.currentLevel);
+            }
+        }
+
+        function gameOver() {
+            gameState.isPlaying = false;
+            document.exitPointerLock();
+            document.getElementById('game-over-screen').classList.add('show');
+            document.getElementById('hud').classList.remove('show');
+        }
+
+        function winGame() {
+            gameState.isPlaying = false;
+            document.exitPointerLock();
+            document.getElementById('win-screen').classList.add('show');
+            document.getElementById('hud').classList.remove('show');
+        }
+
+        function resetLevel() {
+            gameState.isPlaying = true;
+            loadLevel(gameState.currentLevel);
+            setTimeout(() => {
+                renderer.domElement.requestPointerLock();
+            }, 100);
+            document.getElementById('hud').classList.add('show');
+        }
+
+        function returnToMenu() {
+            gameState.isPlaying = false;
+            clearLevel();
+            document.getElementById('menu-screen').classList.remove('hidden');
+            document.getElementById('hud').classList.remove('show');
+            document.getElementById('game-over-screen').classList.remove('show');
+            document.getElementById('win-screen').classList.remove('show');
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+
+            if (gameState.isPlaying) {
+                updateLighting(delta);
+                updatePlayer(delta);
+                updateParasite(delta);
+                updateFriends(delta);
+                updateExitPortal(delta);
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Start the game
+        init();
+    </script>
+</body>
+</html>

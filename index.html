@@ -554,6 +554,8 @@
         // Cutscene variables
         let cutsceneObjects = {};
         let audioContext;
+        let backgroundMusic = null;
+        let musicGainNode = null;
         const cutsceneSequence = [
             { time: 0, action: 'start', subtitle: '' },
             { time: 0.5, action: 'subtitle', subtitle: 'You and Scribble explore the abandoned school...' },
@@ -675,6 +677,12 @@
                 gameState.mouseSensitivity = 0.001 * settings.sensitivity;
             });
 
+            // Music volume control
+            document.getElementById('music-volume').addEventListener('input', (e) => {
+                settings.musicVolume = parseInt(e.target.value) / 100;
+                setMusicVolume(settings.musicVolume);
+            });
+
             // Keyboard controls
             document.addEventListener('keydown', (e) => {
                 keys[e.code] = true;
@@ -745,6 +753,9 @@
             if (!audioContext) {
                 audioContext = new (window.AudioContext || window.webkitAudioContext)();
             }
+
+            // Start background music
+            startBackgroundMusic();
 
             // Create cutscene scene
             createCutsceneScene();
@@ -983,7 +994,8 @@
             head.position.y = 0.45;
             hammerGroup.add(head);
 
-            hammerGroup.position.set(2, 3, -22);
+            // Position on INSIDE of door so player can see it
+            hammerGroup.position.set(2, 3, -21);
             hammerGroup.rotation.z = Math.PI / 4;
             hammerGroup.visible = false;
             scene.add(hammerGroup);
@@ -1009,7 +1021,8 @@
                 shackle.rotation.x = Math.PI;
                 lockGroup.add(shackle);
 
-                lockGroup.position.set(-1 + i, 4, -22);
+                // Position on INSIDE of door so player can see it
+                lockGroup.position.set(-1 + i, 4, -21);
                 lockGroup.visible = false;
                 scene.add(lockGroup);
                 locks.push(lockGroup);
@@ -1022,7 +1035,8 @@
             const plankGeo = new THREE.BoxGeometry(4, 0.3, 0.1);
             const plankMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a });
             const plank = new THREE.Mesh(plankGeo, plankMat);
-            plank.position.set(0, 5, -22);
+            // Position on INSIDE of door so player can see it
+            plank.position.set(0, 5, -21);
             plank.visible = false;
             scene.add(plank);
             cutsceneObjects.plank = plank;
@@ -1378,6 +1392,99 @@
             oscillator2.start(audioContext.currentTime);
             oscillator.stop(audioContext.currentTime + 1.5);
             oscillator2.stop(audioContext.currentTime + 1.5);
+        }
+
+        function startBackgroundMusic() {
+            if (!audioContext || backgroundMusic) return;
+
+            // Create gain node for volume control
+            musicGainNode = audioContext.createGain();
+            musicGainNode.gain.value = 0.15;
+            musicGainNode.connect(audioContext.destination);
+
+            // Create creepy ambient drone
+            backgroundMusic = {
+                oscillators: [],
+                playing: true
+            };
+
+            // Base drone - low rumble
+            const drone1 = audioContext.createOscillator();
+            drone1.type = 'sine';
+            drone1.frequency.value = 55; // Low A
+            const drone1Gain = audioContext.createGain();
+            drone1Gain.gain.value = 0.3;
+            drone1.connect(drone1Gain);
+            drone1Gain.connect(musicGainNode);
+            drone1.start();
+            backgroundMusic.oscillators.push({ osc: drone1, gain: drone1Gain });
+
+            // Slightly detuned second drone for unease
+            const drone2 = audioContext.createOscillator();
+            drone2.type = 'sine';
+            drone2.frequency.value = 56.5; // Slightly off
+            const drone2Gain = audioContext.createGain();
+            drone2Gain.gain.value = 0.2;
+            drone2.connect(drone2Gain);
+            drone2Gain.connect(musicGainNode);
+            drone2.start();
+            backgroundMusic.oscillators.push({ osc: drone2, gain: drone2Gain });
+
+            // Higher eerie tone
+            const eerie = audioContext.createOscillator();
+            eerie.type = 'triangle';
+            eerie.frequency.value = 220;
+            const eerieGain = audioContext.createGain();
+            eerieGain.gain.value = 0.05;
+            eerie.connect(eerieGain);
+            eerieGain.connect(musicGainNode);
+            eerie.start();
+            backgroundMusic.oscillators.push({ osc: eerie, gain: eerieGain });
+
+            // LFO for pulsing effect
+            const lfo = audioContext.createOscillator();
+            lfo.type = 'sine';
+            lfo.frequency.value = 0.1; // Very slow pulse
+            const lfoGain = audioContext.createGain();
+            lfoGain.gain.value = 0.1;
+            lfo.connect(lfoGain);
+            lfoGain.connect(eerieGain.gain);
+            lfo.start();
+            backgroundMusic.oscillators.push({ osc: lfo, gain: lfoGain });
+
+            // Occasional dissonant tone
+            const dissonant = audioContext.createOscillator();
+            dissonant.type = 'sawtooth';
+            dissonant.frequency.value = 82.4; // E2
+            const dissonantGain = audioContext.createGain();
+            dissonantGain.gain.value = 0.02;
+            dissonant.connect(dissonantGain);
+            dissonantGain.connect(musicGainNode);
+            dissonant.start();
+            backgroundMusic.oscillators.push({ osc: dissonant, gain: dissonantGain });
+
+            // Filter for muffled effect
+            const filter = audioContext.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.value = 400;
+            musicGainNode.connect(filter);
+        }
+
+        function stopBackgroundMusic() {
+            if (!backgroundMusic) return;
+
+            backgroundMusic.oscillators.forEach(item => {
+                try {
+                    item.osc.stop();
+                } catch (e) {}
+            });
+            backgroundMusic = null;
+        }
+
+        function setMusicVolume(volume) {
+            if (musicGainNode) {
+                musicGainNode.gain.value = volume * 0.3;
+            }
         }
 
         function skipCutscene() {
@@ -2013,6 +2120,7 @@
         function returnToMenu() {
             gameState.isPlaying = false;
             clearLevel();
+            stopBackgroundMusic();
             document.getElementById('menu-screen').classList.remove('hidden');
             document.getElementById('hud').classList.remove('show');
             document.getElementById('game-over-screen').classList.remove('show');

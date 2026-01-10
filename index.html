@@ -555,7 +555,9 @@
         let cutsceneObjects = {};
         let audioContext;
         let backgroundMusic = null;
+        let menuMusic = null;
         let musicGainNode = null;
+        let menuMusicGainNode = null;
         const cutsceneSequence = [
             { time: 0, action: 'start', subtitle: '' },
             { time: 0.5, action: 'subtitle', subtitle: 'You and Scribble explore the abandoned school...' },
@@ -641,6 +643,13 @@
         }
 
         function setupEventListeners() {
+            // Start menu music on first interaction (required by browsers)
+            const startMenuMusicOnce = () => {
+                startMenuMusic();
+                document.removeEventListener('click', startMenuMusicOnce);
+            };
+            document.addEventListener('click', startMenuMusicOnce);
+
             // Menu buttons
             document.getElementById('play-btn').addEventListener('click', startGame);
             document.getElementById('settings-btn').addEventListener('click', () => {
@@ -743,6 +752,9 @@
             gameState.inCutscene = true;
             gameState.cutsceneTime = 0;
             gameState.isPlaying = false;
+
+            // Stop menu music, start game music
+            stopMenuMusic();
 
             // Show letterbox bars
             document.querySelector('.letterbox.top').classList.remove('hidden');
@@ -1394,6 +1406,106 @@
             oscillator2.stop(audioContext.currentTime + 1.5);
         }
 
+        // ==================== MENU MUSIC ====================
+        function startMenuMusic() {
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (menuMusic) return;
+
+            menuMusicGainNode = audioContext.createGain();
+            menuMusicGainNode.gain.value = 0.12;
+            menuMusicGainNode.connect(audioContext.destination);
+
+            menuMusic = {
+                oscillators: [],
+                intervals: [],
+                playing: true
+            };
+
+            // Mysterious pad - slow evolving chord
+            const pad1 = audioContext.createOscillator();
+            pad1.type = 'sine';
+            pad1.frequency.value = 110; // A2
+            const pad1Gain = audioContext.createGain();
+            pad1Gain.gain.value = 0.2;
+            pad1.connect(pad1Gain);
+            pad1Gain.connect(menuMusicGainNode);
+            pad1.start();
+            menuMusic.oscillators.push({ osc: pad1, gain: pad1Gain });
+
+            // Minor third for mysterious feel
+            const pad2 = audioContext.createOscillator();
+            pad2.type = 'sine';
+            pad2.frequency.value = 130.81; // C3 (minor third)
+            const pad2Gain = audioContext.createGain();
+            pad2Gain.gain.value = 0.15;
+            pad2.connect(pad2Gain);
+            pad2Gain.connect(menuMusicGainNode);
+            pad2.start();
+            menuMusic.oscillators.push({ osc: pad2, gain: pad2Gain });
+
+            // Fifth for depth
+            const pad3 = audioContext.createOscillator();
+            pad3.type = 'triangle';
+            pad3.frequency.value = 164.81; // E3
+            const pad3Gain = audioContext.createGain();
+            pad3Gain.gain.value = 0.1;
+            pad3.connect(pad3Gain);
+            pad3Gain.connect(menuMusicGainNode);
+            pad3.start();
+            menuMusic.oscillators.push({ osc: pad3, gain: pad3Gain });
+
+            // Slow arpeggio melody
+            const melodyNotes = [220, 261.63, 329.63, 261.63, 246.94, 220, 196, 220];
+            let noteIndex = 0;
+            const melodyOsc = audioContext.createOscillator();
+            melodyOsc.type = 'sine';
+            melodyOsc.frequency.value = melodyNotes[0];
+            const melodyGain = audioContext.createGain();
+            melodyGain.gain.value = 0.08;
+            melodyOsc.connect(melodyGain);
+            melodyGain.connect(menuMusicGainNode);
+            melodyOsc.start();
+            menuMusic.oscillators.push({ osc: melodyOsc, gain: melodyGain });
+
+            // Change melody note every 800ms
+            const melodyInterval = setInterval(() => {
+                if (!menuMusic || !menuMusic.playing) return;
+                noteIndex = (noteIndex + 1) % melodyNotes.length;
+                melodyOsc.frequency.setTargetAtTime(melodyNotes[noteIndex], audioContext.currentTime, 0.1);
+                // Fade in/out for smooth transitions
+                melodyGain.gain.setTargetAtTime(0.02, audioContext.currentTime, 0.05);
+                melodyGain.gain.setTargetAtTime(0.08, audioContext.currentTime + 0.1, 0.1);
+            }, 800);
+            menuMusic.intervals.push(melodyInterval);
+
+            // Slow pulsing LFO on the pad
+            const lfo = audioContext.createOscillator();
+            lfo.type = 'sine';
+            lfo.frequency.value = 0.15;
+            const lfoGain = audioContext.createGain();
+            lfoGain.gain.value = 0.05;
+            lfo.connect(lfoGain);
+            lfoGain.connect(pad1Gain.gain);
+            lfo.start();
+            menuMusic.oscillators.push({ osc: lfo, gain: lfoGain });
+        }
+
+        function stopMenuMusic() {
+            if (!menuMusic) return;
+
+            menuMusic.playing = false;
+            menuMusic.intervals.forEach(interval => clearInterval(interval));
+            menuMusic.oscillators.forEach(item => {
+                try {
+                    item.osc.stop();
+                } catch (e) {}
+            });
+            menuMusic = null;
+        }
+
+        // ==================== GAME MUSIC ====================
         function startBackgroundMusic() {
             if (!audioContext || backgroundMusic) return;
 
@@ -1402,77 +1514,152 @@
             musicGainNode.gain.value = 0.15;
             musicGainNode.connect(audioContext.destination);
 
-            // Create creepy ambient drone
             backgroundMusic = {
                 oscillators: [],
+                intervals: [],
                 playing: true
             };
 
-            // Base drone - low rumble
-            const drone1 = audioContext.createOscillator();
-            drone1.type = 'sine';
-            drone1.frequency.value = 55; // Low A
-            const drone1Gain = audioContext.createGain();
-            drone1Gain.gain.value = 0.3;
-            drone1.connect(drone1Gain);
-            drone1Gain.connect(musicGainNode);
-            drone1.start();
-            backgroundMusic.oscillators.push({ osc: drone1, gain: drone1Gain });
+            // Base pad - dark minor chord
+            const bass = audioContext.createOscillator();
+            bass.type = 'sine';
+            bass.frequency.value = 55; // A1
+            const bassGain = audioContext.createGain();
+            bassGain.gain.value = 0.25;
+            bass.connect(bassGain);
+            bassGain.connect(musicGainNode);
+            bass.start();
+            backgroundMusic.oscillators.push({ osc: bass, gain: bassGain });
 
-            // Slightly detuned second drone for unease
-            const drone2 = audioContext.createOscillator();
-            drone2.type = 'sine';
-            drone2.frequency.value = 56.5; // Slightly off
-            const drone2Gain = audioContext.createGain();
-            drone2Gain.gain.value = 0.2;
-            drone2.connect(drone2Gain);
-            drone2Gain.connect(musicGainNode);
-            drone2.start();
-            backgroundMusic.oscillators.push({ osc: drone2, gain: drone2Gain });
+            // Tension note - minor second for dissonance
+            const tension = audioContext.createOscillator();
+            tension.type = 'triangle';
+            tension.frequency.value = 58.27; // Bb1 - creates tension
+            const tensionGain = audioContext.createGain();
+            tensionGain.gain.value = 0.08;
+            tension.connect(tensionGain);
+            tensionGain.connect(musicGainNode);
+            tension.start();
+            backgroundMusic.oscillators.push({ osc: tension, gain: tensionGain });
 
-            // Higher eerie tone
-            const eerie = audioContext.createOscillator();
-            eerie.type = 'triangle';
-            eerie.frequency.value = 220;
-            const eerieGain = audioContext.createGain();
-            eerieGain.gain.value = 0.05;
-            eerie.connect(eerieGain);
-            eerieGain.connect(musicGainNode);
-            eerie.start();
-            backgroundMusic.oscillators.push({ osc: eerie, gain: eerieGain });
+            // Scary melodic pattern - descending minor scale fragments
+            const scaryNotes = [
+                440, 415.30, 392, 369.99,  // A4, Ab4, G4, F#4
+                349.23, 329.63, 311.13, 293.66, // F4, E4, Eb4, D4
+                277.18, 261.63, 246.94, 233.08, // Db4, C4, B3, Bb3
+                220, 233.08, 246.94, 220 // A3, Bb3, B3, A3
+            ];
+            let scaryIndex = 0;
 
-            // LFO for pulsing effect
-            const lfo = audioContext.createOscillator();
-            lfo.type = 'sine';
-            lfo.frequency.value = 0.1; // Very slow pulse
-            const lfoGain = audioContext.createGain();
-            lfoGain.gain.value = 0.1;
-            lfo.connect(lfoGain);
-            lfoGain.connect(eerieGain.gain);
-            lfo.start();
-            backgroundMusic.oscillators.push({ osc: lfo, gain: lfoGain });
+            const melody = audioContext.createOscillator();
+            melody.type = 'triangle';
+            melody.frequency.value = scaryNotes[0];
+            const melodyGain = audioContext.createGain();
+            melodyGain.gain.value = 0;
+            melody.connect(melodyGain);
+            melodyGain.connect(musicGainNode);
+            melody.start();
+            backgroundMusic.oscillators.push({ osc: melody, gain: melodyGain });
 
-            // Occasional dissonant tone
-            const dissonant = audioContext.createOscillator();
-            dissonant.type = 'sawtooth';
-            dissonant.frequency.value = 82.4; // E2
-            const dissonantGain = audioContext.createGain();
-            dissonantGain.gain.value = 0.02;
-            dissonant.connect(dissonantGain);
-            dissonantGain.connect(musicGainNode);
-            dissonant.start();
-            backgroundMusic.oscillators.push({ osc: dissonant, gain: dissonantGain });
+            // Play notes with rests for creepy effect
+            const melodyInterval = setInterval(() => {
+                if (!backgroundMusic || !backgroundMusic.playing) return;
 
-            // Filter for muffled effect
-            const filter = audioContext.createBiquadFilter();
-            filter.type = 'lowpass';
-            filter.frequency.value = 400;
-            musicGainNode.connect(filter);
+                // Random chance to play note or rest
+                if (Math.random() > 0.3) {
+                    scaryIndex = (scaryIndex + 1) % scaryNotes.length;
+                    melody.frequency.setTargetAtTime(scaryNotes[scaryIndex], audioContext.currentTime, 0.05);
+                    // Quick attack, slow decay
+                    melodyGain.gain.setTargetAtTime(0.12, audioContext.currentTime, 0.02);
+                    melodyGain.gain.setTargetAtTime(0.03, audioContext.currentTime + 0.15, 0.3);
+                } else {
+                    // Rest - fade out
+                    melodyGain.gain.setTargetAtTime(0, audioContext.currentTime, 0.1);
+                }
+            }, 500);
+            backgroundMusic.intervals.push(melodyInterval);
+
+            // Heartbeat-like pulse
+            const pulse = audioContext.createOscillator();
+            pulse.type = 'sine';
+            pulse.frequency.value = 40;
+            const pulseGain = audioContext.createGain();
+            pulseGain.gain.value = 0;
+            pulse.connect(pulseGain);
+            pulseGain.connect(musicGainNode);
+            pulse.start();
+            backgroundMusic.oscillators.push({ osc: pulse, gain: pulseGain });
+
+            // Heartbeat rhythm
+            const heartbeatInterval = setInterval(() => {
+                if (!backgroundMusic || !backgroundMusic.playing) return;
+                // First beat
+                pulseGain.gain.setTargetAtTime(0.2, audioContext.currentTime, 0.01);
+                pulseGain.gain.setTargetAtTime(0, audioContext.currentTime + 0.1, 0.05);
+                // Second beat (slightly softer)
+                setTimeout(() => {
+                    if (!backgroundMusic || !backgroundMusic.playing) return;
+                    pulseGain.gain.setTargetAtTime(0.15, audioContext.currentTime, 0.01);
+                    pulseGain.gain.setTargetAtTime(0, audioContext.currentTime + 0.08, 0.05);
+                }, 200);
+            }, 1200);
+            backgroundMusic.intervals.push(heartbeatInterval);
+
+            // High eerie whistle that comes and goes
+            const whistle = audioContext.createOscillator();
+            whistle.type = 'sine';
+            whistle.frequency.value = 880;
+            const whistleGain = audioContext.createGain();
+            whistleGain.gain.value = 0;
+            whistle.connect(whistleGain);
+            whistleGain.connect(musicGainNode);
+            whistle.start();
+            backgroundMusic.oscillators.push({ osc: whistle, gain: whistleGain });
+
+            // Occasional whistle
+            const whistleInterval = setInterval(() => {
+                if (!backgroundMusic || !backgroundMusic.playing) return;
+                if (Math.random() > 0.7) {
+                    const freq = 660 + Math.random() * 440;
+                    whistle.frequency.setTargetAtTime(freq, audioContext.currentTime, 0.1);
+                    whistleGain.gain.setTargetAtTime(0.03, audioContext.currentTime, 0.5);
+                    whistleGain.gain.setTargetAtTime(0, audioContext.currentTime + 2, 0.5);
+                }
+            }, 3000);
+            backgroundMusic.intervals.push(whistleInterval);
+
+            // String-like tremolo for tension
+            const string = audioContext.createOscillator();
+            string.type = 'sawtooth';
+            string.frequency.value = 165; // E3
+            const stringGain = audioContext.createGain();
+            stringGain.gain.value = 0.02;
+            const stringFilter = audioContext.createBiquadFilter();
+            stringFilter.type = 'lowpass';
+            stringFilter.frequency.value = 800;
+            string.connect(stringFilter);
+            stringFilter.connect(stringGain);
+            stringGain.connect(musicGainNode);
+            string.start();
+            backgroundMusic.oscillators.push({ osc: string, gain: stringGain });
+
+            // Tremolo LFO
+            const tremoloLfo = audioContext.createOscillator();
+            tremoloLfo.type = 'sine';
+            tremoloLfo.frequency.value = 6;
+            const tremoloGain = audioContext.createGain();
+            tremoloGain.gain.value = 0.015;
+            tremoloLfo.connect(tremoloGain);
+            tremoloGain.connect(stringGain.gain);
+            tremoloLfo.start();
+            backgroundMusic.oscillators.push({ osc: tremoloLfo, gain: tremoloGain });
         }
 
         function stopBackgroundMusic() {
             if (!backgroundMusic) return;
 
+            backgroundMusic.playing = false;
+            backgroundMusic.intervals.forEach(interval => clearInterval(interval));
             backgroundMusic.oscillators.forEach(item => {
                 try {
                     item.osc.stop();
@@ -1484,6 +1671,9 @@
         function setMusicVolume(volume) {
             if (musicGainNode) {
                 musicGainNode.gain.value = volume * 0.3;
+            }
+            if (menuMusicGainNode) {
+                menuMusicGainNode.gain.value = volume * 0.25;
             }
         }
 
@@ -2121,6 +2311,7 @@
             gameState.isPlaying = false;
             clearLevel();
             stopBackgroundMusic();
+            startMenuMusic();
             document.getElementById('menu-screen').classList.remove('hidden');
             document.getElementById('hud').classList.remove('show');
             document.getElementById('game-over-screen').classList.remove('show');
